@@ -1,39 +1,41 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+import gspread
+from google.oauth2.service_account import Credentials
 
-st.set_page_config(page_title="نظام الإدارة المالية", layout="wide")
+# إعداد الربط الآمن
+scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+client = gspread.authorize(creds)
 
-# إعدادات الرابط
+# معرف ملفك
 sheet_id = "1NsqAFO4_l8-EiLPlw3P1fQzOX0skjWO0DvwUI15gp8k"
+sh = client.open_by_key(sheet_id)
 
-# قائمة جانبية للإدخال
-st.sidebar.header("📥 إدخال بيانات جديدة")
-tab_choice = st.sidebar.selectbox("اختر نوع الإدخال:", ["سجل العمليات", "الاستثمارات"])
+st.title("📊 نظام ميزانية أبو معاذ الذكي")
 
-if tab_choice == "سجل العمليات":
-    with st.sidebar.form("ops_form"):
-        date = st.date_input("التاريخ", datetime.now())
-        desc = st.text_input("البيان (مثلاً: راتب، قسط، تسوق)")
-        amount = st.number_input("المبلغ", min_value=0.0)
-        cat = st.selectbox("التصنيف", ["راتب", "مصاريف ثابتة", "أسهم", "نثريات"])
-        submit = st.form_submit_button("حفظ العملية")
-        if submit:
-            st.sidebar.success("سيتم الحفظ في جوجل شيت..")
-            # هنا سيتم الربط البرمجي للكتابة لاحقاً
+# نموذج الإدخال
+with st.form("entry_form"):
+    st.subheader("📥 إضافة عملية جديدة")
+    date = st.date_input("التاريخ")
+    desc = st.text_input("البيان (مثلاً: راتب، تسوق، أسهم)")
+    amount = st.number_input("المبلغ", min_value=0.0)
+    target = st.selectbox("إرسال إلى:", ["سجل العمليات", "الاستثمارات"])
+    
+    if st.form_submit_button("حفظ البيانات ✅"):
+        ws = sh.worksheet(target)
+        ws.append_row([str(date), desc, amount])
+        st.success("تم الحفظ في جوجل شيت بنجاح!")
+        st.cache_data.clear()
 
-elif tab_choice == "الاستثمارات":
-    with st.sidebar.form("invest_form"):
-        stock_name = st.text_input("اسم السهم")
-        buy_price = st.number_input("سعر الشراء")
-        current_price = st.number_input("السعر الحالي")
-        submit = st.form_submit_button("إضافة للمحفظة")
-
-# --- عرض البيانات الحالي ---
-st.title("📊 لوحة التحكم المالية")
-
-def get_data(sheet_name):
-    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+# عرض ملخص بسيط
+st.divider()
+st.subheader("📝 آخر العمليات")
+try:
+    df = pd.DataFrame(sh.worksheet("سجل العمليات").get_all_records())
+    st.table(df.tail(5))
+except:
+    st.info("بانتظار إدخال أول عملية لعرضها هنا.")
     return pd.read_csv(url)
 
 col1, col2 = st.columns(2)
